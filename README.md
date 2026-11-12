@@ -14,7 +14,7 @@ cd ByMe-Lab
 python3 byme_lab.py
 ```
 
-Apri **http://127.0.0.1:8765** se il browser non si apre automaticamente. Non serve `pip install`: usa solo la libreria standard di Python. Il gateway è preimpostato su `192.168.21.113:5045`, modificabile in **Impostazioni**.
+Apri **http://127.0.0.1:8765** se il browser non si apre automaticamente. Non serve `pip install`: usa solo la libreria standard di Python. Il gateway è preimpostato su `192.168.21.113:5045`, modificabile in **Connessione**.
 
 ## Funzioni
 
@@ -24,6 +24,27 @@ Apri **http://127.0.0.1:8765** se il browser non si apre automaticamente. Non se
 - Parsing KNX preliminare, senza inventare significati specifici Vimar.
 - Salvataggio locale automatico, download ZIP con eventi cronologici, note e traccia binaria originale (`tcp_stream.bin`).
 - Diagnostica: byte TCP durante il monitor, blocchi ricevuti, righe riconosciute e telegrammi validi.
+- Censimento automatico delle sorgenti e dei gruppi realmente osservati, collegamenti fra indirizzi, nomi di comodo salvati.
+- Importazione di vecchi ZIP ed elenco degli ID EEPROM letto dallo `/status` del gateway.
+- Esportazione dell'anagrafica e CSV con nomi di comodo; riferimento a indirizzi/dispositivi nelle annotazioni.
+
+## Nuovo nella versione 1.2: censimento e nomi salvati
+
+Le impostazioni sono suddivise in tre pannelli **Connessione**, **Zone climatiche** e **Dispositivi**.
+
+In **Dispositivi** puoi vedere tre categorie distinte:
+
+- **Sorgenti individuali KNX** osservate nei telegrammi, ad esempio `1.1.42` (possibili dispositivi mittenti).
+- **Indirizzi di gruppo KNX**, ad esempio `1/4/137` (destinazioni logiche, NON dispositivi fisici in sé).
+- **Identificativi EEPROM ESP_KNXGate** letti via `GET http://<ip>/status`. I loro valori non vengono automaticamente associati a un indirizzo KNX.
+
+Ogni riga può avere un **nome di comodo, categoria, zona e note**, con flag *verificato* solo dopo prove ripetute. I nomi compaiono nel monitor, nei gruppi più attivi, nel menu annotazioni e nei CSV esportati. Una sorgente è associata ai gruppi a cui l'hai vista inviare telegrammi; questa relazione osservata non dimostra il ruolo fisico.
+
+Premi **Importa ZIP sessione** per ricostruire l'inventario da un archivio precedente, senza dover registrare nuovamente. È consentito lo ZIP esportato dal programma e contenente `eventi.jsonl`; una stessa copia esatta non viene conteggiata due volte.
+
+I dati sono salvati in `~/Documents/ByMe-Lab/dispositivi.json`, che puoi esportare anche separatamente come backup. Lo ZIP di una sessione include la copia dei nomi **al momento dell'esportazione** (non è una fotografia storica). I nomi non vengono condivisi con GitHub: sono locali.
+
+**Attenzione:** il censimento è passivo e quindi mostra soltanto gli indirizzi effettivamente osservati. Può non trovare luci, tapparelle o termostati silenziosi. La lettura `/status` è una richiesta HTTP in sola lettura, non un'interrogazione di ciascun dispositivo sul bus.
 
 ## Problema del log vuoto: risolto in v1.1.0
 
