@@ -11,6 +11,7 @@ import collections
 import csv
 import datetime as dt
 import io
+import http.client
 import json
 import os
 from pathlib import Path
@@ -23,9 +24,11 @@ import time
 import urllib.parse
 import webbrowser
 import zipfile
+
+from byme_inventory import Inventory, parse_status
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 BASE_DIR = Path.home() / "Documents" / "ByMe-Lab"
 SESSIONS = BASE_DIR / "sessioni"
 SETTINGS_FILE = BASE_DIR / "impostazioni.json"
@@ -151,6 +154,7 @@ class Capture:
         except (OSError, ValueError):
             settings = {}
         self.settings = {**DEFAULTS, **{k: v for k, v in settings.items() if k in DEFAULTS}}
+        self.inventory = Inventory(BASE_DIR / "dispositivi.json")
         self.status = "idle"
         self.message = "Pronto: avvia una nuova acquisizione"
         self.stop_signal = threading.Event()
@@ -185,6 +189,7 @@ class Capture:
             if typ in ("bus", "ack", "info"):
                 self.counts["lines"] += 1
             if typ == "bus":
+                self.inventory.observe({"type":"bus", **fields, "time":event["time"]})
                 self.counts["frames"] += 1
                 if fields.get("repeat"):
                     self.counts["repeats"] += 1
@@ -202,23 +207,67 @@ class Capture:
                 self.counts["notes"] += 1
             return event
 
-    def set_settings(self, data):
+    def save_connection(self, data):
         ip = str(data.get("ip", "")).strip()
         if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,150}", ip):
             raise ValueError("Indirizzo IP o hostname non valido")
         port = int(data.get("port", 5045))
         if not 1 <= port <= 65535:
             raise ValueError("Porta non valida")
-        zones = data.get("zones", DEFAULTS["zones"])
-        if not isinstance(zones, list) or len(zones) != 4:
-            raise ValueError("Servono quattro nomi di zona")
-        zones = [str(x).strip()[:60] or f"Zona {i+1}" for i, x in enumerate(zones)]
         with self.lock:
             if self.status in ("running", "paused", "connecting", "stopping"):
-                raise ValueError("Arresta il monitor prima di cambiare il gateway")
-            self.settings = {"ip": ip, "port": port, "zones": zones}
-            SETTINGS_FILE.write_text(json.dumps(self.settings, indent=2, ensure_ascii=False), encoding="utf-8")
-        return self.settings
+                raise ValueError("Arresta il monitor prima di cambiare la connessione")
+            self.settings.update({"ip": ip, "port": port})
+            self._write_settings()
+            return dict(self.settings)
+
+    def save_zones(self, data):
+        zones = data.get("zones")
+        if not isinstance(zones, list) or len(zones) != 4:
+            raise ValueError("Indica quattro nomi di zona")
+        zones = [str(x).strip()[:60] or f"Zona {i+1}" for i, x in enumerate(zones)]
+        with self.lock:
+            # Cambiare le etichette durante la prova renderebbe ambigue le note.
+            if self.status in ("running", "paused", "connecting", "stopping"):
+                raise ValueError("Arresta il monitor prima di rinominare le zone")
+            self.settings["zones"] = zones
+            self._write_settings()
+            return dict(self.settings)
+
+    def _write_settings(self):
+        SETTINGS_FILE.write_text(json.dumps(self.settings, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def set_settings(self, data):
+        # Compatibilità con client 1.1: valida e salva entrambi insieme.
+        self.save_connection(data)
+        return self.save_zones(data)
+
+    def import_discovery(self, blob):
+        result = self.inventory.import_capture_zip(blob)
+        self.emit("system", message=(f"Importazione inventario: {result['frames']} telegrammi, "
+                                     f"{result['new_sources']} nuove sorgenti e {result['new_groups']} gruppi"))
+        return result
+
+    def read_gateway_status(self):
+        """Legge SOLO HTTP /status: non invia comandi sul bus o al monitor UART."""
+        with self.lock:
+            address = self.settings["ip"]
+        conn = http.client.HTTPConnection(address, 80, timeout=5)
+        try:
+            conn.request("GET", "/status", headers={"Accept":"text/plain,text/html"})
+            response = conn.getresponse()
+            if response.status != 200:
+                raise ValueError(f"/status HTTP {response.status}")
+            raw = response.read(120_000)
+        except (OSError, TimeoutError, http.client.HTTPException) as exc:
+            raise ValueError(f"Impossibile leggere /status: {exc}") from exc
+        finally:
+            conn.close()
+        body = raw.decode("utf-8", errors="replace")
+        ids = parse_status(body)
+        added = self.inventory.add_eeprom(ids)
+        return {"total_eeprom": len(ids), "new_eeprom": added,
+                "notice": "Identificativi EEPROM del gateway: non equivalgono a indirizzi KNX già verificati."}
 
     def start(self, name):
         with self.lock:
@@ -298,7 +347,13 @@ class Capture:
             note = str(data.get("note", "")).strip()[:2000]
             if not any((action, zone, origin, note)):
                 raise ValueError("Nota vuota")
-            return self.emit("note", action=action, zone=zone, origin=origin, note=note)
+            target_kind = str(data.get("target_kind", ""))
+            target_addr = str(data.get("target_address", "")).strip()
+            if target_kind and not self.inventory.valid(target_kind, target_addr):
+                raise ValueError("Riferimento dispositivo non valido")
+            target_label = self.inventory.label(target_kind, target_addr) if target_kind else ""
+            return self.emit("note", action=action, zone=zone, origin=origin, note=note,
+                             target_kind=target_kind, target_address=target_addr, target_label=target_label)
 
     def _receive(self, chunk, monitor=False):
         """Keep the exact TCP bytes even when parsing/line endings fail."""
@@ -406,6 +461,7 @@ class Capture:
                     pass
             with self.lock:
                 self.gateway_restored = restored
+                self.inventory.save()
                 self.pending_chars = 0
                 if restored is True:
                     self.emit("system", message="Ripristino modalità TCP richiesto, #ok ricevuto")
@@ -510,6 +566,7 @@ class Capture:
                        "warnings": ["Interpretazioni DPT/By-me non confermate; valori grezzi preservati.",
                                     "Finestre eventi 12s dopo le note: correlazione, NON causalità.",
                                     "La pausa acquisizione scarta telegrammi; non usare una pausa per prove importanti."]}
+            inventory_snapshot = self.inventory.snapshot()
             experiments = []
             for i, n in enumerate(notes):
                 start = dt.datetime.fromisoformat(n["time"])
@@ -537,18 +594,23 @@ class Capture:
                 for filename in ("eventi.jsonl", "bus_raw.txt", "tcp_stream.bin", "sessione.json"):
                     z.write(folder / filename, arcname=filename)
                 z.writestr("riepilogo.json", json.dumps(summary, ensure_ascii=False, indent=2))
+                z.writestr("anagrafica_dispositivi.json", json.dumps(inventory_snapshot, ensure_ascii=False, indent=2))
                 z.writestr("esperimenti.json", json.dumps(experiments, ensure_ascii=False, indent=2))
                 csvbuf = io.StringIO()
                 writer = csv.writer(csvbuf)
-                writer.writerow(["ora_locale", "tipo", "sorgente", "destinazione", "operazione", "valore", "ritrasmissione", "checksum_ok", "telegramma_grezzo"])
+                writer.writerow(["ora_locale", "tipo", "sorgente", "nome_sorgente", "destinazione", "nome_gruppo", "operazione", "valore", "ritrasmissione", "checksum_ok", "telegramma_grezzo"])
                 for ev in frames:
-                    writer.writerow([ev.get("time"), ev["type"], ev.get("src", ""), ev.get("dst", ""),
+                    src, dst = ev.get("src", ""), ev.get("dst", "")
+                    writer.writerow([ev.get("time"), ev["type"], src,
+                                     inventory_snapshot["sources"].get(src, {}).get("name", ""),
+                                     dst, inventory_snapshot["groups"].get(dst, {}).get("name", ""),
                                      ev.get("apci", ""), ev.get("value", ""), ev.get("repeat", ""),
                                      ev.get("checksum_ok", ""), ev.get("raw", "")])
                 z.writestr("telegrammi.csv", "\ufeff" + csvbuf.getvalue())
                 textbuf = ["NOTE CRONOLOGICHE DELLE PROVE", "--------------------------------", ""]
                 for n in notes:
                     textbuf += [f"{n['time']} | {n.get('zone','')} | {n.get('origin','')} | {n.get('action','')}",
+                                f"  Riferimento: {n.get('target_label') or n.get('target_address') or 'nessuno'}",
                                 f"  {n.get('note', '')}", ""]
                 z.writestr("note_esperimento.txt", "\n".join(textbuf))
                 z.writestr("LEGGIMI_ANALISI.txt", (
@@ -557,7 +619,8 @@ class Capture:
                     "eventi.jsonl: sequenza cronologica completa con timestamp e note.\n"
                     "bus_raw.txt: righe del gateway + orari locali.\n"
                     "tcp_stream.bin: tutti i byte TCP ricevuti, anche se il parser fallisce.\n"
-                    "telegrammi.csv: campi standard KNX interpretati ove possibile.\n"
+                    "telegrammi.csv: campi standard KNX con nomi di comodo.\n"
+                    "anagrafica_dispositivi.json: nomi correnti al momento dell'esportazione (non storico).\n"
                     "esperimenti.json: telegrammi osservati 12 secondi dopo una nota.\n"
                     "ATTENZIONE: gruppo / DPT / semantica Vimar By-me ancora da confermare.\n"
                     "Il monitor NON invia comandi di funzionamento agli attuatori.\n"
@@ -597,6 +660,22 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 since = 0
             return self.respond_json(CAPTURE.snapshot(since))
+        if path == "/api/inventory":
+            if self.headers.get("X-Byme-Token") != TOKEN:
+                return self.respond_json({"error": "Token di sicurezza assente"}, 403)
+            return self.respond_json(CAPTURE.inventory.snapshot())
+        if path == "/api/inventory/export":
+            if self.headers.get("X-Byme-Token") != TOKEN:
+                return self.respond_json({"error": "Token di sicurezza assente"}, 403)
+            blob = json.dumps(CAPTURE.inventory.snapshot(), ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="ByMe_Lab_dispositivi.json"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(blob)))
+            self.end_headers()
+            self.wfile.write(blob)
+            return
         if path == "/api/sessions":
             if self.headers.get("X-Byme-Token") != TOKEN:
                 return self.respond_json({"error": "Token di sicurezza assente"}, 403)
@@ -639,13 +718,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("X-Byme-Token") != TOKEN:
             return self.respond_json({"error": "Token di sicurezza assente"}, 403)
         try:
+            path = urllib.parse.urlsplit(self.path).path
             size = int(self.headers.get("Content-Length", "0"))
+            if path == "/api/import-capture":
+                if not (0 < size <= 12_000_000):
+                    return self.respond_json({"error": "ZIP troppo grande (max 12 MB)"}, 400)
+                data_zip = self.rfile.read(size)
+                return self.respond_json({"ok": True, **CAPTURE.import_discovery(data_zip)})
             if size <= 0 or size > 15000:
                 return self.respond_json({"error": "Dimensione richiesta non valida"}, 400)
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict):
                 raise ValueError("Richiesta JSON non valida")
-            path = urllib.parse.urlsplit(self.path).path
             if path == "/api/start":
                 CAPTURE.start(data.get("name", "Prova termostati"))
             elif path == "/api/stop":
@@ -658,6 +742,14 @@ class Handler(BaseHTTPRequestHandler):
                 CAPTURE.add_note(data)
             elif path == "/api/settings":
                 CAPTURE.set_settings(data)
+            elif path == "/api/connection":
+                CAPTURE.save_connection(data)
+            elif path == "/api/zones":
+                CAPTURE.save_zones(data)
+            elif path == "/api/inventory/update":
+                CAPTURE.inventory.rename(str(data.get("kind", "")), str(data.get("address", "")), data)
+            elif path == "/api/gateway-status":
+                return self.respond_json({"ok": True, **CAPTURE.read_gateway_status()})
             else:
                 return self.respond_json({"error": "Endpoint inesistente"}, 404)
             return self.respond_json({"ok": True})
