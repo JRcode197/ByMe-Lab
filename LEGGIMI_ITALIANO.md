@@ -23,7 +23,7 @@
 
 ## Uso suggerito
 
-1. Imposta IP `192.168.21.113`, porta `5045` e personalizza i nomi delle quattro zone in **Impostazioni**.
+1. Imposta IP `192.168.21.113`, porta `5045` e personalizza i nomi delle quattro zone in **Connessione** e **Zone climatiche**.
 2. Dai un nome alla prova, es. `Soggiorno ON OFF`.
 3. Premi **Avvia** e attendi `Acquisizione in corso`.
 4. Scegli la zona e la sorgente (termostato parete, centrale o Home Assistant).
@@ -31,13 +31,27 @@
 6. Premi **Ferma**. Attendi il messaggio di ripristino `#ok ricevuto`.
 7. Premi **Scarica pacchetto ZIP**. Allega lo ZIP nella conversazione ChatGPT in cui stiamo ricostruendo il protocollo.
 
+## Censimento dispositivi (versione 1.2)
+
+Apri **Dispositivi** dal menu superiore. Tre elenchi indipendenti sono disponibili:
+
+1. **Sorgenti individuali KNX** osservate sul bus. Sono candidati mittenti, non una classificazione certa di un dispositivo fisico.
+2. **Gruppi KNX** (destinazioni logiche). Uno stesso dispositivo può partecipare a più gruppi.
+3. **ID EEPROM** indicati dal firmware ESP_KNXGate sul suo `/status`, che non possono essere equiparati ai due tipi di indirizzi precedenti senza prove.
+
+Per popolare il catalogo **senza avviare la cattura**, importa uno ZIP di una precedente sessione ByMe Lab. Puoi usare quello già prodotto il 12 novembre. Per recuperare gli ID EEPROM premi **Leggi elenco EEPROM da /status**: il programma esegue una lettura HTTP e non invia telegrammi al bus. Poi seleziona gli elementi e inserisci nome, categoria, zona e note. Non attivare *identificazione verificata* sulla sola base di un codice: effettua prove ripetute.
+
+I nomi assegnati compaiono immediatamente nel monitor e nei gruppi più attivi, e possono essere selezionati anche durante un'annotazione. Le impostazioni di connessione e i nomi delle quattro zone si salvano in pannelli separati. L'inventario si salva automaticamente in `~/Documents/ByMe-Lab/dispositivi.json`.
+
+**Importante:** nessun inventario passivo è esaustivo; vedrai prima le sorgenti attive. La modalità TCP del gateway può influire sull'instradamento MQTT: per prove legate a Home Assistant, confronta sempre il comportamento in modalità normale e durante la cattura.
+
 ## Pausa
 
 **Pausa** scarta i telegrammi mentre la connessione TCP resta attiva; **Riprendi** ricomincia la registrazione, annotando l'intervallo saltato. **Congela vista** invece blocca soltanto la visualizzazione: il file continua a registrare. Per prove critiche, preferisci **Congela vista**.
 
 ## File e privacy
 
-I file vengono scritti **anche mentre la registrazione è in corso** in `~/Documents/ByMe-Lab/sessioni`. La sessione produce `eventi.jsonl`, `bus_raw.txt` e `sessione.json`; lo ZIP aggiunge `telegrammi.csv`, `riepilogo.json`, `note_esperimento.txt` ed `esperimenti.json` (telegrammi entro 12 secondi dopo ciascuna annotazione, senza supporre causalità).
+I file vengono scritti **anche mentre la registrazione è in corso** in `~/Documents/ByMe-Lab/sessioni`. La sessione produce `eventi.jsonl`, `bus_raw.txt` e `sessione.json`; lo ZIP aggiunge `telegrammi.csv` (anche i nomi), `anagrafica_dispositivi.json`, `riepilogo.json`, `note_esperimento.txt` ed `esperimenti.json` (telegrammi entro 12 secondi dopo ciascuna annotazione, senza supporre causalità).
 
 **Non viene inviato automaticamente nulla a ChatGPT**. Scarica lo ZIP e allegalo tu. L'interfaccia web è accessibile solo sul Mac che esegue lo script (`127.0.0.1`). Le note e i telegrammi possono rivelare struttura e abitudini d'uso dell'impianto.
 
