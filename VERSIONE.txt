@@ -1,0 +1,1 @@
+ByMe Lab 1.1.0 — parsing CR/LF robusto, filtri iniziali aperti, diagnostica TCP, stream grezzo binario.
