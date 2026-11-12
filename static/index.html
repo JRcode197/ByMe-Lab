@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="byme-token" content="__BYME_TOKEN__">
+  <title>ByMe Lab · Monitor bus</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header class="header">
+    <div class="brand"><div class="logo"><span>⌁</span></div><div><div class="brand-title">ByMe <strong>Lab</strong> <span class="version">v1.1</span></div><div class="subtitle">ESP_KNXGate · analisi delle quattro zone climatiche</div></div></div>
+    <div class="header-right"><span class="local"><span class="dot"></span> SOLO SUL TUO MAC</span><button class="btn btn-minimal" id="settingsToggle">⚙ Impostazioni</button></div>
+  </header>
+  <section class="intro"><div><div class="eyebrow">LABORATORIO PROTOCOLLO · VIMAR BY-ME</div><h1>Capire cosa comunica<br>il tuo impianto.</h1><p>Registra il bus, marca ogni esperimento e crea un archivio pronto da condividere per la decodifica. Nessun comando di riscaldamento viene inviato da questo programma.</p></div><div class="stack"><div class="device">CENTRALE <b>21509</b></div><div class="device">TERMOSTATI <b>4 × 14514</b></div><div class="device">ATTUATORE <b>01851.2</b></div></div></section>
+  <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+  <section id="settingsPanel" class="settings-panel hidden" aria-label="Impostazioni gateway">
+    <div class="panel-title"><h2>Connessione e nomi delle zone</h2><span>Salva prima di avviare il monitor</span></div>
+    <div class="settings-grid"><label>IP ESP_KNXGate<input id="gatewayIp" placeholder="192.168.21.113" autocomplete="off"></label><label>Porta TCP<input id="gatewayPort" type="number" min="1" max="65535" value="5045"></label><label>Zona / OUT 1<input id="zone1" placeholder="Zona 1"></label><label>Zona / OUT 2<input id="zone2" placeholder="Zona 2"></label><label>Zona / OUT 3<input id="zone3" placeholder="Zona 3"></label><label>Zona / OUT 4<input id="zone4" placeholder="Zona 4"></label></div>
+    <button class="btn btn-primary" id="saveSettings">Salva impostazioni</button>
+  </section>
+  <section class="statusbar" aria-live="polite"><div class="state-label"><span class="status-dot" id="statusDot"></span><span id="stateTitle">In attesa</span><span id="stateMessage">Caricamento…</span></div><div class="gateway-label">GATEWAY <strong id="targetLabel">192.168.21.113:5045</strong></div></section>
+  <main class="layout">
+    <aside class="left-col">
+      <section class="panel control">
+        <div class="section-top"><span class="kicker">01 / SESSIONE</span><span class="tiny">Registrazione locale</span></div><h2>Acquisizione</h2>
+        <label class="field-label" for="sessionName">Nome della prova</label><input id="sessionName" value="Test termostati ON OFF" maxlength="90" placeholder="Es. Soggiorno ON/OFF">
+        <div class="button-grid"><button id="startBtn" class="btn btn-primary" title="Avvia una nuova sessione">▶ Avvia</button><button id="pauseBtn" class="btn btn-secondary" disabled>Ⅱ Pausa</button><button id="stopBtn" class="btn btn-danger" disabled>■ Ferma</button></div>
+        <p class="small-note">In pausa la connessione TCP resta aperta, ma i nuovi telegrammi <strong>non vengono registrati</strong>. La ripresa viene annotata nel log.</p>
+        <div class="divider"></div><div class="metric-grid"><div><span>TELEGRAMMI</span><strong id="metricFrames">0</strong></div><div><span>RITRASMISSIONI</span><strong id="metricRepeats">0</strong></div><div><span>NOTE</span><strong id="metricNotes">0</strong></div><div><span>SCARTATI IN PAUSA</span><strong id="metricIgnored">0</strong></div></div>
+        <div class="sessionpath" id="sessionPath">Nessuna sessione avviata</div>
+      </section>
+      <section class="panel annotations">
+        <div class="section-top"><span class="kicker">02 / ESPERIMENTO</span><span class="tiny orange">Marca prima del gesto</span></div><h2>Annota cosa fai</h2>
+        <p class="panel-desc">Premi un evento <strong>subito prima</strong> di usare il termostato o Home Assistant: i telegrammi successivi saranno confrontabili con la tua azione.</p>
+        <div class="two"><label>Zona<select id="noteZone"></select></label><label>Da dove<select id="noteOrigin"><option>Termostato a parete</option><option>Centrale 21509</option><option>Home Assistant</option><option>Altro</option></select></label></div>
+        <div class="action-buttons"><button data-action="ON">ON</button><button data-action="OFF">OFF</button><button data-action="Setpoint +1°C">+1°C</button><button data-action="Setpoint -1°C">−1°C</button><button data-action="AUTO">AUTO</button><button data-action="MANUALE">MANUALE</button></div>
+        <label class="field-label" for="noteText">Dettagli della prova (facoltativi)</label><textarea id="noteText" rows="3" placeholder="Es. imposto 22 °C; la stanza è a 20,5 °C; la valvola era chiusa…"></textarea>
+        <button id="addNoteBtn" class="btn btn-outline block">＋ Inserisci nota libera</button>
+        <div class="helptext">I pulsanti ON/OFF qui <b>aggiungono soltanto una nota</b>: non azionano la valvola.</div>
+      </section>
+      <section class="panel export">
+        <div class="section-top"><span class="kicker">03 / CONDIVISIONE</span></div><h2>Esporta per l'analisi</h2>
+        <p class="panel-desc">Crea uno ZIP con log grezzo, dati cronologici, note, CSV e candidati rilevati dopo ogni azione.</p>
+        <label class="field-label" for="archiveSel">Quale sessione vuoi scaricare?</label>
+        <select id="archiveSel"><option value="">Sessione corrente</option></select>
+        <button id="exportBtn" class="btn btn-export block" disabled>↓ Scarica pacchetto ZIP</button>
+        <p class="helptext">Poi allega lo ZIP nella conversazione ChatGPT. Il programma non carica nulla online da solo.</p>
+      </section>
+    </aside>
+    <section class="right-col">
+      <section class="panel stream">
+        <div class="stream-header"><div><span class="kicker">BUS MONITOR / LIVE</span><h2>Traccia dei telegrammi</h2></div><div class="live-pill"><span class="dot"></span> <span id="streamState">IN ATTESA</span></div></div>
+        <div class="toolbar"><label class="search-wrap">⌕ <input id="filterText" placeholder="Filtra per sorgente, gruppo o byte…" aria-label="Filtra telegrammi"></label><label class="check"><input type="checkbox" id="filterRepeat"> Nascondi ripetizioni</label><label class="check"><input type="checkbox" id="filterAck"> Nascondi ACK / diagnostica</label><label class="check"><input type="checkbox" id="freezeView"> Congela vista</label></div>
+        <div class="thead"><span>ORA</span><span>ORIGINE → DESTINAZIONE</span><span>TIPO / VALORE</span><span>DATI GREZZI</span></div>
+        <div id="rows" class="rows"><div class="empty"><div class="empty-icon">⌁</div><strong>Nessun telegramma acquisito</strong><p>Premi Avvia e annota un'azione sul termostato.</p></div></div>
+        <div class="stream-footer"><span id="rowsVisible">0 righe visualizzate</span><span>La vista è limitata alle righe recenti; il file salva l'intera sessione.</span></div>
+      </section>
+      <section class="insights-grid"><div class="panel compact"><div class="section-top"><span class="kicker">INDIRIZZI / DESTINAZIONI</span><span class="tiny">Clicca per filtrare</span></div><h2>Gruppi più attivi</h2><div id="groupStats" class="statslist"><div class="muted">I gruppi appariranno dopo la prima acquisizione.</div></div></div><div class="panel compact"><div class="section-top"><span class="kicker">DIAGNOSTICA</span></div><h2>Integrità del bus</h2><div class="diagnostics"><div><span>Checksum non validi / formato</span><strong id="metricBad">0</strong></div><div><span>Conferme brevi (ACK)</span><strong id="metricAck">0</strong></div><div><span>Byte TCP dal monitor</span><strong id="metricTcpBytes">0</strong></div><div><span>Blocchi TCP</span><strong id="metricTcpChunks">0</strong></div><div><span>Righe riconosciute</span><strong id="metricRawLines">0</strong></div><div><span>Ultima ricezione</span><strong id="lastReceived">—</strong></div><div><span>Ripristino gateway</span><strong id="restoreStatus">—</strong></div></div><p class="helptext" id="diagHint">I byte grezzi vengono conservati anche se il decoder non identifica messaggi.</p><p class="helptext">Gli indirizzi e l'APCI sono una lettura KNX standard, non una decodifica confermata delle funzioni By-me.</p></div></section>
+    </section>
+  </main>
+  <footer><span>ByMe Lab · Strumento locale di diagnostica in sola lettura</span><span>Python standard library · 127.0.0.1</span></footer>
+</div>
+</body>
+</html>
