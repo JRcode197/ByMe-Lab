@@ -36,3 +36,11 @@ Segna l'evento nel programma **appena prima** di eseguire il gesto fisico; ripet
 ## Quando carichi lo ZIP su ChatGPT
 
 Puoi scrivere: “Analizza gli eventi cronologici e le note del pacchetto ByMe Lab. Per ogni gesto individua i telegrammi candidati entro 12 secondi, raggruppali per sorgente/destinazione e confronta ON/OFF, ritrasmissioni e variazioni dei byte. Distingui le ipotesi dai fatti osservati e proponi il successivo test che permetterebbe di confermare il significato.”
+
+## Censimento luci, tapparelle, clima
+
+Inizia importando una sessione precedente dal pannello **Dispositivi**, quindi leggi la lista EEPROM dallo `/status` del gateway. Dai un nome solo agli indirizzi per cui hai un'ipotesi fondata. Non considerare automaticamente `1.1.42`, `1/4/137` e `0C89` come lo stesso dispositivo.
+
+Effettua registrazioni brevi con un solo comando alla volta: una luce ON/OFF, una tapparella su/giù, uno dei termostati MANUALE/OFF. Annota l'orario prima del gesto e lascia 10–15 secondi fra i gesti. Verifica che il monitor riceva davvero telegrammi dopo l'annotazione: nel file del 12 novembre 2026, tutte le otto annotazioni Home Assistant erano successive all'ultimo telegramma ricevuto.
+
+Dopo una prova ripetuta senza dubbi, assegna un nome al candidato e seleziona **Identificazione verificata**. In caso contrario, lascia lo stato non verificato e scrivi la tua ipotesi nelle note. Esporta un nuovo ZIP e allegalo per l'analisi; non pubblicare su GitHub i log reali dell'abitazione.
