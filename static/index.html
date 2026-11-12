@@ -12,15 +12,38 @@
 <body>
 <div class="shell">
   <header class="header">
-    <div class="brand"><div class="logo"><span>⌁</span></div><div><div class="brand-title">ByMe <strong>Lab</strong> <span class="version">v1.1</span></div><div class="subtitle">ESP_KNXGate · analisi delle quattro zone climatiche</div></div></div>
-    <div class="header-right"><span class="local"><span class="dot"></span> SOLO SUL TUO MAC</span><button class="btn btn-minimal" id="settingsToggle">⚙ Impostazioni</button></div>
+    <div class="brand"><div class="logo"><span>⌁</span></div><div><div class="brand-title">ByMe <strong>Lab</strong> <span class="version">v1.2</span></div><div class="subtitle">ESP_KNXGate · censimento, monitoraggio e analisi By-me</div></div></div>
+    <div class="header-right"><span class="local"><span class="dot"></span> SOLO SUL TUO MAC</span><button class="btn btn-minimal config-trigger" data-panel="connectionPanel">◉ Connessione</button><button class="btn btn-minimal config-trigger" data-panel="zonesPanel">♧ Zone climatiche</button><button class="btn btn-minimal config-trigger" data-panel="inventoryPanel">▦ Dispositivi <span id="navInventoryCount"></span></button></div>
   </header>
-  <section class="intro"><div><div class="eyebrow">LABORATORIO PROTOCOLLO · VIMAR BY-ME</div><h1>Capire cosa comunica<br>il tuo impianto.</h1><p>Registra il bus, marca ogni esperimento e crea un archivio pronto da condividere per la decodifica. Nessun comando di riscaldamento viene inviato da questo programma.</p></div><div class="stack"><div class="device">CENTRALE <b>21509</b></div><div class="device">TERMOSTATI <b>4 × 14514</b></div><div class="device">ATTUATORE <b>01851.2</b></div></div></section>
+  <section class="intro"><div><div class="eyebrow">LABORATORIO PROTOCOLLO · VIMAR BY-ME</div><h1>Capire cosa comunica<br>il tuo impianto.</h1><p>Osserva il bus, censisci sorgenti e gruppi, assegna nomi, annota gli esperimenti e genera archivi per la decodifica. Nessun comando di riscaldamento viene inviato da questo programma.</p></div><div class="stack"><div class="device">CENTRALE <b>21509</b></div><div class="device">TERMOSTATI <b>4 × 14514</b></div><div class="device">ATTUATORE <b>01851.2</b></div></div></section>
   <div id="toast" class="toast" role="alert" aria-live="polite"></div>
-  <section id="settingsPanel" class="settings-panel hidden" aria-label="Impostazioni gateway">
-    <div class="panel-title"><h2>Connessione e nomi delle zone</h2><span>Salva prima di avviare il monitor</span></div>
-    <div class="settings-grid"><label>IP ESP_KNXGate<input id="gatewayIp" placeholder="192.168.21.113" autocomplete="off"></label><label>Porta TCP<input id="gatewayPort" type="number" min="1" max="65535" value="5045"></label><label>Zona / OUT 1<input id="zone1" placeholder="Zona 1"></label><label>Zona / OUT 2<input id="zone2" placeholder="Zona 2"></label><label>Zona / OUT 3<input id="zone3" placeholder="Zona 3"></label><label>Zona / OUT 4<input id="zone4" placeholder="Zona 4"></label></div>
-    <button class="btn btn-primary" id="saveSettings">Salva impostazioni</button>
+  <section id="connectionPanel" class="settings-panel hidden" aria-label="Parametri connessione">
+    <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CONNESSIONE</span><h2>Gateway ESP_KNXGate</h2></div><span>Solo indirizzo e porta. Salvataggio indipendente dalle zone.</span></div>
+    <div class="settings-grid connection-fields"><label>Indirizzo IP / hostname<input id="gatewayIp" placeholder="192.168.21.113" autocomplete="off"></label><label>Porta TCP del monitor<input id="gatewayPort" type="number" min="1" max="65535" value="5045"></label></div>
+    <div class="button-group"><button class="btn btn-primary" id="saveConnection">Salva connessione</button><button class="btn btn-outline" id="readStatusFromConn">Leggi /status e censisci EEPROM</button></div>
+    <p class="helptext">Il monitor TCP è passivo per il bus ma può modificare temporaneamente l'instradamento del gateway. Non avviare due monitor contemporaneamente. Il comando /status legge esclusivamente il server HTTP del gateway.</p>
+  </section>
+  <section id="zonesPanel" class="settings-panel hidden" aria-label="Nomi delle zone climatiche">
+    <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CLIMA</span><h2>Le quattro zone climatiche</h2></div><span>Ogni etichetta può essere usata nelle annotazioni e nelle schede dispositivi.</span></div>
+    <div class="settings-grid zones-fields"><label>Zona / OUT 1<input id="zone1" maxlength="60" placeholder="Zona 1"></label><label>Zona / OUT 2<input id="zone2" maxlength="60" placeholder="Zona 2"></label><label>Zona / OUT 3<input id="zone3" maxlength="60" placeholder="Zona 3"></label><label>Zona / OUT 4<input id="zone4" maxlength="60" placeholder="Zona 4"></label></div>
+    <button class="btn btn-primary" id="saveZones">Salva nomi zone</button>
+    <p class="helptext">Le zone sono etichette per il laboratorio. Non cambiano configurazioni o associazioni della centrale Vimar 21509.</p>
+  </section>
+  <section id="inventoryPanel" class="settings-panel hidden" aria-label="Inventario dispositivi">
+    <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CENSIMENTO PASSIVO</span><h2>Catalogo indirizzi e dispositivi candidati</h2></div><span id="inventorySummary">Nessun indirizzo ancora osservato</span></div>
+    <p class="panel-desc">Una <b>sorgente fisica KNX</b> identifica un indirizzo mittente; un <b>gruppo KNX</b> è una destinazione logica; un <b>ID EEPROM</b> deriva dall'elenco interno del gateway. Non sono necessariamente lo stesso dispositivo. I nomi e le categorie sono ipotesi dell'utente, non decodifiche automatiche.</p>
+    <div class="button-group registry-actions"><button class="btn btn-outline" id="readGatewayStatus">⟳ Leggi elenco EEPROM da /status</button><label class="btn btn-outline upload-label">↑ Importa ZIP sessione <input id="importCaptureFile" type="file" accept=".zip,application/zip" hidden></label><button class="btn btn-minimal" id="exportInventory">↓ Esporta inventario JSON</button></div>
+    <div class="inventory-workspace">
+      <div class="inventory-index">
+        <div class="inventory-controls"><label>Tipo di indirizzo<select id="inventoryKind"><option value="sources">Sorgenti individuali KNX</option><option value="groups">Indirizzi di gruppo KNX</option><option value="eeprom">ID salvati nella EEPROM</option></select></label><label>Filtro / nome<input id="inventorySearch" placeholder="Es. 1/4/137, tapparella, camera"></label><label class="check inventory-check"><input type="checkbox" id="inventoryUnlabeled"> Solo senza nome</label></div>
+        <div class="inventory-head"><span>Indirizzo / nome</span><span>Occorrenze</span></div>
+        <div id="inventoryList" class="inventory-list"><p class="muted">Nessun elemento. Avvia una registrazione oppure importa lo ZIP precedente.</p></div>
+      </div>
+      <div class="inventory-editor" id="inventoryEditor">
+        <div class="inventory-placeholder">Seleziona un indirizzo a sinistra per assegnargli un nome e una categoria.</div>
+      </div>
+    </div>
+    <p class="helptext">I dati vengono salvati automaticamente in <code>~/Documents/ByMe-Lab/dispositivi.json</code>. Gli ZIP importati sono letti localmente e non inviati su Internet. Per un inventario attendibile, osserva anche luci e tapparelle mentre le usi.</p>
   </section>
   <section class="statusbar" aria-live="polite"><div class="state-label"><span class="status-dot" id="statusDot"></span><span id="stateTitle">In attesa</span><span id="stateMessage">Caricamento…</span></div><div class="gateway-label">GATEWAY <strong id="targetLabel">192.168.21.113:5045</strong></div></section>
   <main class="layout">
@@ -37,6 +60,7 @@
         <div class="section-top"><span class="kicker">02 / ESPERIMENTO</span><span class="tiny orange">Marca prima del gesto</span></div><h2>Annota cosa fai</h2>
         <p class="panel-desc">Premi un evento <strong>subito prima</strong> di usare il termostato o Home Assistant: i telegrammi successivi saranno confrontabili con la tua azione.</p>
         <div class="two"><label>Zona<select id="noteZone"></select></label><label>Da dove<select id="noteOrigin"><option>Termostato a parete</option><option>Centrale 21509</option><option>Home Assistant</option><option>Altro</option></select></label></div>
+        <label class="field-label" for="noteTarget">Indirizzo / dispositivo coinvolto (facoltativo)</label><select id="noteTarget"><option value="">Non specificato</option></select>
         <div class="action-buttons"><button data-action="ON">ON</button><button data-action="OFF">OFF</button><button data-action="Setpoint +1°C">+1°C</button><button data-action="Setpoint -1°C">−1°C</button><button data-action="AUTO">AUTO</button><button data-action="MANUALE">MANUALE</button></div>
         <label class="field-label" for="noteText">Dettagli della prova (facoltativi)</label><textarea id="noteText" rows="3" placeholder="Es. imposto 22 °C; la stanza è a 20,5 °C; la valvola era chiusa…"></textarea>
         <button id="addNoteBtn" class="btn btn-outline block">＋ Inserisci nota libera</button>
@@ -59,7 +83,7 @@
         <div id="rows" class="rows"><div class="empty"><div class="empty-icon">⌁</div><strong>Nessun telegramma acquisito</strong><p>Premi Avvia e annota un'azione sul termostato.</p></div></div>
         <div class="stream-footer"><span id="rowsVisible">0 righe visualizzate</span><span>La vista è limitata alle righe recenti; il file salva l'intera sessione.</span></div>
       </section>
-      <section class="insights-grid"><div class="panel compact"><div class="section-top"><span class="kicker">INDIRIZZI / DESTINAZIONI</span><span class="tiny">Clicca per filtrare</span></div><h2>Gruppi più attivi</h2><div id="groupStats" class="statslist"><div class="muted">I gruppi appariranno dopo la prima acquisizione.</div></div></div><div class="panel compact"><div class="section-top"><span class="kicker">DIAGNOSTICA</span></div><h2>Integrità del bus</h2><div class="diagnostics"><div><span>Checksum non validi / formato</span><strong id="metricBad">0</strong></div><div><span>Conferme brevi (ACK)</span><strong id="metricAck">0</strong></div><div><span>Byte TCP dal monitor</span><strong id="metricTcpBytes">0</strong></div><div><span>Blocchi TCP</span><strong id="metricTcpChunks">0</strong></div><div><span>Righe riconosciute</span><strong id="metricRawLines">0</strong></div><div><span>Ultima ricezione</span><strong id="lastReceived">—</strong></div><div><span>Ripristino gateway</span><strong id="restoreStatus">—</strong></div></div><p class="helptext" id="diagHint">I byte grezzi vengono conservati anche se il decoder non identifica messaggi.</p><p class="helptext">Gli indirizzi e l'APCI sono una lettura KNX standard, non una decodifica confermata delle funzioni By-me.</p></div></section>
+      <section class="insights-grid"><div class="panel compact"><div class="section-top"><span class="kicker">INDIRIZZI / DESTINAZIONI</span><span class="tiny">Clicca per filtrare</span></div><h2>Gruppi più attivi</h2><div id="groupStats" class="statslist"><div class="muted">I gruppi appariranno dopo la prima acquisizione; potrai assegnare nomi in «Dispositivi».</div></div></div><div class="panel compact"><div class="section-top"><span class="kicker">DIAGNOSTICA</span></div><h2>Integrità del bus</h2><div class="diagnostics"><div><span>Checksum non validi / formato</span><strong id="metricBad">0</strong></div><div><span>Conferme brevi (ACK)</span><strong id="metricAck">0</strong></div><div><span>Byte TCP dal monitor</span><strong id="metricTcpBytes">0</strong></div><div><span>Blocchi TCP</span><strong id="metricTcpChunks">0</strong></div><div><span>Righe riconosciute</span><strong id="metricRawLines">0</strong></div><div><span>Ultima ricezione</span><strong id="lastReceived">—</strong></div><div><span>Ripristino gateway</span><strong id="restoreStatus">—</strong></div></div><p class="helptext" id="diagHint">I byte grezzi vengono conservati anche se il decoder non identifica messaggi.</p><p class="helptext">Gli indirizzi e l'APCI sono una lettura KNX standard, non una decodifica confermata delle funzioni By-me.</p></div></section>
     </section>
   </main>
   <footer><span>ByMe Lab · Strumento locale di diagnostica in sola lettura</span><span>Python standard library · 127.0.0.1</span></footer>
