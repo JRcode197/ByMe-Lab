@@ -17,8 +17,10 @@ import re
 import threading
 import time
 import zipfile
+import secrets
+from byme_config import MAX_JSON, fingerprint, normalize_inventory, normalize_zones, plan_import
 
-VERSION = 1
+VERSION = 2
 MAX_ZIP = 12_000_000
 MAX_EVENTS_BYTES = 18_000_000
 SOURCE_RE = re.compile(r"^(?:[0-9]|1[0-5])\.(?:[0-9]|1[0-5])\.(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
@@ -56,6 +58,7 @@ class Inventory:
         self.data = {"version": VERSION, "sources": {}, "groups": {}, "eeprom": {}, "imports": []}
         self.changed = False
         self.last_save = 0.0
+        self.pending_import = None
         if self.path.exists():
             try:
                 raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -65,6 +68,8 @@ class Inventory:
                             self.data[kind] = raw[kind]
                     if isinstance(raw.get("imports"), list):
                         self.data["imports"] = raw["imports"][-100:]
+                    if 'climate_zones' in raw:
+                        self.data['climate_zones'] = normalize_zones(raw['climate_zones'], self.valid)
             except (OSError, ValueError):
                 # Do not overwrite an invalid config until an explicit change.
                 raise ValueError("Archivio dispositivi non valido: fai una copia e correggi dispositivi.json")
@@ -176,6 +181,51 @@ class Inventory:
     def snapshot(self):
         with self.lock:
             return copy.deepcopy(self.data)
+
+    def set_zones(self, zones):
+        zones = normalize_zones(zones, self.valid)
+        with self.lock:
+            updated = self.snapshot()
+            updated['climate_zones'] = zones
+            self._commit_config(updated)
+
+    def _commit_config(self, updated):
+        """Write backup and replacement before publishing the new in-memory state."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        backup = self.path.with_name(self.path.stem + '.backup-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.json')
+        backup.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding='utf-8')
+        temp = self.path.with_suffix('.tmp')
+        temp.write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding='utf-8')
+        temp.replace(self.path)
+        self.data = updated
+        self.changed = False
+        self.last_save = time.monotonic()
+        return str(backup)
+
+    def preview_config(self, raw, mode):
+        if len(json.dumps(raw, ensure_ascii=False).encode()) > MAX_JSON:
+            raise ValueError('JSON troppo grande (massimo 4 MB)')
+        incoming = normalize_inventory(raw, self.valid, CATEGORIES)
+        with self.lock:
+            updated, changes = plan_import(self.data, incoming, mode)
+            if 'climate_zones' in updated:
+                updated['climate_zones'] = normalize_zones(updated['climate_zones'], self.valid)
+            preview_id = secrets.token_urlsafe(24)
+            self.pending_import = (preview_id, fingerprint(self.data), updated, time.monotonic())
+            return {'preview_id': preview_id, 'mode': mode, 'changes': changes,
+                    'summary': {action: sum(c['action'] == action for c in changes) for action in ('aggiunto', 'modificato', 'rimosso')},
+                    'zones_preserved': 'climate_zones' not in incoming}
+
+    def apply_config(self, preview_id):
+        with self.lock:
+            pending = self.pending_import
+            if not pending or pending[0] != preview_id or time.monotonic() - pending[3] > 900:
+                raise ValueError('Anteprima assente o scaduta: rigenera l’anteprima')
+            if pending[1] != fingerprint(self.data):
+                raise ValueError('Il catalogo è cambiato: rigenera l’anteprima prima di importare')
+            backup = self._commit_config(pending[2])
+            self.pending_import = None
+            return {'backup': backup}
 
     def label(self, kind, address):
         with self.lock:
