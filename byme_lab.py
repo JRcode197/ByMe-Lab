@@ -26,10 +26,11 @@ import webbrowser
 import zipfile
 
 from byme_inventory import Inventory, parse_status
+from byme_config import MAX_JSON, normalize_zones
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.2.0"
-BASE_DIR = Path.home() / "Documents" / "ByMe-Lab"
+VERSION = "1.3.0"
+BASE_DIR = Path(os.environ.get('BYME_DATA_DIR', Path.home() / "Documents" / "ByMe-Lab"))
 SESSIONS = BASE_DIR / "sessioni"
 SETTINGS_FILE = BASE_DIR / "impostazioni.json"
 STATIC = Path(__file__).resolve().parent / "static"
@@ -39,7 +40,7 @@ EXIT_TCP = b'#setup {"debug":"no"}'
 KNX_RE = re.compile(r"^\s*(KNX|SCS)\[(\d+)\]:\s*(.*)$", re.I)
 HEX_RE = re.compile(r"^[0-9a-fA-F]{2}$")
 DEFAULTS = {"ip": "192.168.21.113", "port": 5045,
-            "zones": ["Zona 1", "Zona 2", "Zona 3", "Zona 4"]}
+            "zones": [f"Zona {i}" for i in range(1, 6)]}
 
 
 def timestamp():
@@ -155,6 +156,15 @@ class Capture:
             settings = {}
         self.settings = {**DEFAULTS, **{k: v for k, v in settings.items() if k in DEFAULTS}}
         self.inventory = Inventory(BASE_DIR / "dispositivi.json")
+        if 'climate_zones' not in self.inventory.data:
+            legacy = list(self.settings['zones'])
+            while len(legacy) < 5:
+                name = f'Zona {len(legacy)+1}'
+                while name in legacy:
+                    name += ' nuova'
+                legacy.append(name)
+            self.inventory.set_zones(legacy)
+        self._sync_zones()
         self.status = "idle"
         self.message = "Pronto: avvia una nuova acquisizione"
         self.stop_signal = threading.Event()
@@ -222,17 +232,31 @@ class Capture:
             return dict(self.settings)
 
     def save_zones(self, data):
-        zones = data.get("zones")
-        if not isinstance(zones, list) or len(zones) != 4:
-            raise ValueError("Indica quattro nomi di zona")
-        zones = [str(x).strip()[:60] or f"Zona {i+1}" for i, x in enumerate(zones)]
+        zones = data.get('climate_zones', data.get('zones'))
+        zones = normalize_zones(zones, self.inventory.valid)
         with self.lock:
             # Cambiare le etichette durante la prova renderebbe ambigue le note.
             if self.status in ("running", "paused", "connecting", "stopping"):
                 raise ValueError("Arresta il monitor prima di rinominare le zone")
-            self.settings["zones"] = zones
+            self.inventory.set_zones(zones)
+            self._sync_zones()
             self._write_settings()
             return dict(self.settings)
+
+    def _sync_zones(self):
+        zones = self.inventory.snapshot()['climate_zones']
+        self.settings['climate_zones'] = zones
+        self.settings['zones'] = [z['name'] for z in zones]
+
+    def import_configuration(self, data, apply=False):
+        with self.lock:
+            if self.status not in ('idle', 'error'):
+                raise ValueError('Arresta il monitor prima di importare la configurazione')
+            if not apply:
+                return self.inventory.preview_config(data.get('config'), data.get('mode'))
+            result = self.inventory.apply_config(data.get('preview_id'))
+            self._sync_zones()
+            return result
 
     def _write_settings(self):
         SETTINGS_FILE.write_text(json.dumps(self.settings, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -300,8 +324,8 @@ class Capture:
             (folder / "sessione.json").write_text(json.dumps({
                 "versione": VERSION, "sessione": self.session_name, "inizio": self.session_started,
                 "gateway": {"ip": self.settings["ip"], "port": self.settings["port"]},
-                "zone": self.settings["zones"], "impianto": {
-                    "centrale": "Vimar 21509", "termostati": "4 × Vimar 14514",
+                "zone": self.settings["zones"], "climate_zones": self.settings['climate_zones'], "impianto": {
+                    "centrale": "Vimar 21509", "termostati": "Vimar 14514 (associazioni nel catalogo zone)",
                     "attuatore": "Vimar 01851.2", "gateway": "ESP_KNXGate"}},
                 ensure_ascii=False, indent=2), encoding="utf-8")
             self.status = "connecting"
@@ -725,11 +749,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond_json({"error": "ZIP troppo grande (max 12 MB)"}, 400)
                 data_zip = self.rfile.read(size)
                 return self.respond_json({"ok": True, **CAPTURE.import_discovery(data_zip)})
-            if size <= 0 or size > 15000:
+            limit = MAX_JSON if path == '/api/inventory/import-preview' else 300000 if path == '/api/zones' else 15000
+            if size <= 0 or size > limit:
                 return self.respond_json({"error": "Dimensione richiesta non valida"}, 400)
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict):
                 raise ValueError("Richiesta JSON non valida")
+            if path == '/api/inventory/import-preview':
+                return self.respond_json(CAPTURE.import_configuration(data))
+            if path == '/api/inventory/import-apply':
+                return self.respond_json(CAPTURE.import_configuration(data, apply=True))
             if path == "/api/start":
                 CAPTURE.start(data.get("name", "Prova termostati"))
             elif path == "/api/stop":

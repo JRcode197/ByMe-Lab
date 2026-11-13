@@ -1,6 +1,6 @@
 # ByMe Lab — monitor grafico per ESP_KNXGate
 
-**Per il tuo impianto:** centrale Vimar 21509, quattro cronotermostati Plana 14514, attuatore 01851.2 (4 testine per pavimento radiante), gateway ESP_KNXGate su `192.168.21.113:5045`.
+**Per il tuo impianto:** centrale Vimar 21509, cronotermostati Plana 14514, con almeno cinque zone configurabili nel laboratorio, attuatore 01851.2 (4 testine per pavimento radiante), gateway ESP_KNXGate su `192.168.21.113:5045`.
 
 ## Avvio su iMac
 
@@ -23,7 +23,7 @@
 
 ## Uso suggerito
 
-1. Imposta IP `192.168.21.113`, porta `5045` e personalizza i nomi delle quattro zone in **Connessione** e **Zone climatiche**.
+1. Imposta IP `192.168.21.113`, porta `5045` e personalizza i nomi e le associazioni delle zone in **Connessione** e **Zone climatiche**.
 2. Dai un nome alla prova, es. `Soggiorno ON OFF`.
 3. Premi **Avvia** e attendi `Acquisizione in corso`.
 4. Scegli la zona e la sorgente (termostato parete, centrale o Home Assistant).
@@ -31,7 +31,11 @@
 6. Premi **Ferma**. Attendi il messaggio di ripristino `#ok ricevuto`.
 7. Premi **Scarica pacchetto ZIP**. Allega lo ZIP nella conversazione ChatGPT in cui stiamo ricostruendo il protocollo.
 
-## Censimento dispositivi (versione 1.2)
+## Importazione JSON e zone (versione 1.3)
+
+Consulta la [guida importazione JSON e zone indipendenti](README.md#versione-13-importazione-json-e-zone-indipendenti) per anteprima, unione, sostituzione, backup e migrazione. In **Zone climatiche** usa **Aggiungi zona**, associa termostato, indirizzi e attuatore, poi **Salva zone e associazioni**. Non è necessario avere un attuatore con tante uscite quante sono le zone.
+
+## Censimento dispositivi
 
 Apri **Dispositivi** dal menu superiore. Tre elenchi indipendenti sono disponibili:
 
@@ -41,7 +45,7 @@ Apri **Dispositivi** dal menu superiore. Tre elenchi indipendenti sono disponibi
 
 Per popolare il catalogo **senza avviare la cattura**, importa uno ZIP di una precedente sessione ByMe Lab. Puoi usare quello già prodotto il 12 novembre. Per recuperare gli ID EEPROM premi **Leggi elenco EEPROM da /status**: il programma esegue una lettura HTTP e non invia telegrammi al bus. Poi seleziona gli elementi e inserisci nome, categoria, zona e note. Non attivare *identificazione verificata* sulla sola base di un codice: effettua prove ripetute.
 
-I nomi assegnati compaiono immediatamente nel monitor e nei gruppi più attivi, e possono essere selezionati anche durante un'annotazione. Le impostazioni di connessione e i nomi delle quattro zone si salvano in pannelli separati. L'inventario si salva automaticamente in `~/Documents/ByMe-Lab/dispositivi.json`.
+I nomi assegnati compaiono immediatamente nel monitor e nei gruppi più attivi, e possono essere selezionati anche durante un'annotazione. Le impostazioni di connessione e i nomi e le associazioni delle zone si salvano in pannelli separati. L'inventario si salva automaticamente in `~/Documents/ByMe-Lab/dispositivi.json`.
 
 **Importante:** nessun inventario passivo è esaustivo; vedrai prima le sorgenti attive. La modalità TCP del gateway può influire sull'instradamento MQTT: per prove legate a Home Assistant, confronta sempre il comportamento in modalità normale e durante la cattura.
 

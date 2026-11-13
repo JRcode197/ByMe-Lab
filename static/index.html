@@ -12,10 +12,10 @@
 <body>
 <div class="shell">
   <header class="header">
-    <div class="brand"><div class="logo"><span>⌁</span></div><div><div class="brand-title">ByMe <strong>Lab</strong> <span class="version">v1.2</span></div><div class="subtitle">ESP_KNXGate · censimento, monitoraggio e analisi By-me</div></div></div>
-    <div class="header-right"><span class="local"><span class="dot"></span> SOLO SUL TUO MAC</span><button class="btn btn-minimal config-trigger" data-panel="connectionPanel">◉ Connessione</button><button class="btn btn-minimal config-trigger" data-panel="zonesPanel">♧ Zone climatiche</button><button class="btn btn-minimal config-trigger" data-panel="inventoryPanel">▦ Dispositivi <span id="navInventoryCount"></span></button></div>
+    <div class="brand"><div class="logo"><span>⌁</span></div><div><div class="brand-title">ByMe <strong>Lab</strong> <span class="version">v1.3</span></div><div class="subtitle">ESP_KNXGate · censimento, monitoraggio e analisi By-me</div></div></div>
+    <div class="header-right"><span class="local"><span class="dot"></span> SOLO IN LOCALE</span><button class="btn btn-minimal config-trigger" data-panel="connectionPanel">◉ Connessione</button><button class="btn btn-minimal config-trigger" data-panel="zonesPanel">♧ Zone climatiche</button><button class="btn btn-minimal config-trigger" data-panel="inventoryPanel">▦ Dispositivi <span id="navInventoryCount"></span></button></div>
   </header>
-  <section class="intro"><div><div class="eyebrow">LABORATORIO PROTOCOLLO · VIMAR BY-ME</div><h1>Capire cosa comunica<br>il tuo impianto.</h1><p>Osserva il bus, censisci sorgenti e gruppi, assegna nomi, annota gli esperimenti e genera archivi per la decodifica. Nessun comando di riscaldamento viene inviato da questo programma.</p></div><div class="stack"><div class="device">CENTRALE <b>21509</b></div><div class="device">TERMOSTATI <b>4 × 14514</b></div><div class="device">ATTUATORE <b>01851.2</b></div></div></section>
+  <section class="intro"><div><div class="eyebrow">LABORATORIO PROTOCOLLO · VIMAR BY-ME</div><h1>Capire cosa comunica<br>il tuo impianto.</h1><p>Osserva il bus, censisci sorgenti e gruppi, assegna nomi, annota gli esperimenti e genera archivi per la decodifica. Nessun comando di riscaldamento viene inviato da questo programma.</p></div><div class="stack"><div class="device">CENTRALE <b>21509</b></div><div class="device">TERMOSTATI <b>14514</b></div><div class="device">ATTUATORE <b>01851.2</b></div></div></section>
   <div id="toast" class="toast" role="alert" aria-live="polite"></div>
   <section id="connectionPanel" class="settings-panel hidden" aria-label="Parametri connessione">
     <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CONNESSIONE</span><h2>Gateway ESP_KNXGate</h2></div><span>Solo indirizzo e porta. Salvataggio indipendente dalle zone.</span></div>
@@ -24,15 +24,23 @@
     <p class="helptext">Il monitor TCP è passivo per il bus ma può modificare temporaneamente l'instradamento del gateway. Non avviare due monitor contemporaneamente. Il comando /status legge esclusivamente il server HTTP del gateway.</p>
   </section>
   <section id="zonesPanel" class="settings-panel hidden" aria-label="Nomi delle zone climatiche">
-    <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CLIMA</span><h2>Le quattro zone climatiche</h2></div><span>Ogni etichetta può essere usata nelle annotazioni e nelle schede dispositivi.</span></div>
-    <div class="settings-grid zones-fields"><label>Zona / OUT 1<input id="zone1" maxlength="60" placeholder="Zona 1"></label><label>Zona / OUT 2<input id="zone2" maxlength="60" placeholder="Zona 2"></label><label>Zona / OUT 3<input id="zone3" maxlength="60" placeholder="Zona 3"></label><label>Zona / OUT 4<input id="zone4" maxlength="60" placeholder="Zona 4"></label></div>
-    <button class="btn btn-primary" id="saveZones">Salva nomi zone</button>
-    <p class="helptext">Le zone sono etichette per il laboratorio. Non cambiano configurazioni o associazioni della centrale Vimar 21509.</p>
+    <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CLIMA</span><h2>Zone climatiche indipendenti</h2></div><span>Ogni etichetta può essere usata nelle annotazioni e nelle schede dispositivi.</span></div>
+    <div id="zoneCards"></div>
+    <div class="button-group"><button class="btn btn-outline" id="addZone">＋ Aggiungi zona</button><button class="btn btn-primary" id="saveZones">Salva zone e associazioni</button></div>
+    <p class="helptext">Le zone sono indipendenti dalle uscite degli attuatori. Ogni associazione può essere ipotizzata o verificata con prove. Gli indirizzi EEPROM restano distinti dagli indirizzi KNX. Salvataggio locale: nessun comando alla centrale.</p>
   </section>
   <section id="inventoryPanel" class="settings-panel hidden" aria-label="Inventario dispositivi">
     <div class="panel-title"><div><span class="kicker">CONFIGURAZIONE / CENSIMENTO PASSIVO</span><h2>Catalogo indirizzi e dispositivi candidati</h2></div><span id="inventorySummary">Nessun indirizzo ancora osservato</span></div>
     <p class="panel-desc">Una <b>sorgente fisica KNX</b> identifica un indirizzo mittente; un <b>gruppo KNX</b> è una destinazione logica; un <b>ID EEPROM</b> deriva dall'elenco interno del gateway. Non sono necessariamente lo stesso dispositivo. I nomi e le categorie sono ipotesi dell'utente, non decodifiche automatiche.</p>
-    <div class="button-group registry-actions"><button class="btn btn-outline" id="readGatewayStatus">⟳ Leggi elenco EEPROM da /status</button><label class="btn btn-outline upload-label">↑ Importa ZIP sessione <input id="importCaptureFile" type="file" accept=".zip,application/zip" hidden></label><button class="btn btn-minimal" id="exportInventory">↓ Esporta inventario JSON</button></div>
+    <div class="button-group registry-actions"><button class="btn btn-outline" id="readGatewayStatus">⟳ Leggi elenco EEPROM da /status</button><label class="btn btn-outline upload-label">↑ Importa ZIP sessione <input id="importCaptureFile" type="file" accept=".zip,application/zip" hidden></label><label class="btn btn-outline upload-label">↑ Importa configurazione JSON<input id="importConfigFile" type="file" accept=".json,application/json" hidden></label><button class="btn btn-minimal" id="exportInventory">↓ Esporta inventario JSON</button></div>
+    <section id="configImportPanel" class="hidden import-preview" aria-label="Anteprima importazione JSON">
+      <h3>Importa configurazione JSON</h3><p id="configFileName"></p>
+      <label>Modalità<select id="configImportMode"><option value="merge">Unione</option><option value="replace">Sostituzione</option></select></label>
+      <p class="helptext">Unione: conserva gli indirizzi assenti nel file; sui duplicati usa le etichette del file e il massimo dei conteggi, senza sommarli. Sostituzione: rimpiazza tutte le schede dei dispositivi, comprese le osservazioni. Le zone vengono importate solo se presenti nel JSON; in unione sono abbinate per ID. Alla conferma viene creato un backup locale prima delle modifiche.</p>
+      <button id="previewConfig" class="btn btn-outline">Genera anteprima</button><p id="configSummary" role="status"></p>
+      <div id="configChanges"></div>
+      <div class="button-group"><button id="applyConfig" class="btn btn-primary" disabled>Conferma importazione</button><button id="cancelConfig" class="btn btn-minimal">Annulla</button></div>
+    </section>
     <div class="inventory-workspace">
       <div class="inventory-index">
         <div class="inventory-controls"><label>Tipo di indirizzo<select id="inventoryKind"><option value="sources">Sorgenti individuali KNX</option><option value="groups">Indirizzi di gruppo KNX</option><option value="eeprom">ID salvati nella EEPROM</option></select></label><label>Filtro / nome<input id="inventorySearch" placeholder="Es. 1/4/137, tapparella, camera"></label><label class="check inventory-check"><input type="checkbox" id="inventoryUnlabeled"> Solo senza nome</label></div>

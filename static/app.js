@@ -18,7 +18,7 @@ async function action(path,data={}, msg='Operazione eseguita') {
 function updateZoneOptions(names){const sel=$('noteZone');const was=sel.value;sel.innerHTML=names.map((n,i)=>`<option value="${esc(n)}">${i+1} · ${esc(n)}</option>`).join('');if(names.includes(was))sel.value=was;}
 function labelFor(kind,address){const found=inventory[kind]?.[address];return found?.name || address || '—';}
 function friendly(kind,address){const name=inventory[kind]?.[address]?.name;return name ? `${name} · ${address}`:address||'—';}
-function renderSettings(settings){$('gatewayIp').value=settings.ip;$('gatewayPort').value=settings.port;$('targetLabel').textContent=`${settings.ip}:${settings.port}`;settings.zones.forEach((n,i)=>{$(`zone${i+1}`).value=n});updateZoneOptions(settings.zones);}
+function renderSettings(settings){$('gatewayIp').value=settings.ip;$('gatewayPort').value=settings.port;$('targetLabel').textContent=`${settings.ip}:${settings.port}`;renderZoneCards(settings.climate_zones);updateZoneOptions(settings.zones);}
 function hhmm(iso){if(!iso)return '';try{return new Date(iso).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+'.'+iso.substring(20,23);}catch(e){return iso.substring(11,23)}}
 function renderEvent(e){const t=esc(hhmm(e.time)); if(e.type==='note')return `<div class="logrow note"><span class="time">${t}</span><span class="addr">✎ ${esc(e.zone)} · ${esc(e.action)} <small>da ${esc(e.origin)}${e.target_address?' · '+esc(friendly(e.target_kind, e.target_address)):''}${e.note?' — '+esc(e.note):''}</small></span></div>`;
   if(e.type==='system')return `<div class="logrow system"><span class="time">${t}</span><span class="addr">◈ ${esc(e.message)}</span></div>`;
@@ -82,7 +82,7 @@ document.querySelectorAll('.config-trigger').forEach(button=>button.onclick=()=>
   if(!open){target.classList.remove('hidden');if(target.id==='inventoryPanel')refreshInventory();target.scrollIntoView({behavior:'smooth',block:'nearest'});}
 });
 $('saveConnection').onclick=()=>action('/api/connection',{ip:$('gatewayIp').value,port:Number($('gatewayPort').value)},'Connessione salvata');
-$('saveZones').onclick=()=>action('/api/zones',{zones:[1,2,3,4].map(i=>$(`zone${i}`).value)},'Nomi delle zone salvati');
+$('saveZones').onclick=()=>action('/api/zones',{climate_zones:readZoneCards()},'Zone e associazioni salvate');
 $('startBtn').onclick=async()=>{history=[];lastId=0;await action('/api/start',{name:$('sessionName').value||'Test termostati'},'Nuova sessione avviata');};
 $('pauseBtn').onclick=()=>action(current.status==='paused'?'/api/resume':'/api/pause',{},current.status==='paused'?'Acquisizione ripresa':'Acquisizione in pausa: pacchetti non salvati');
 $('stopBtn').onclick=()=>action('/api/stop',{},'Arresto richiesto; verifica il ripristino TCP');
@@ -157,7 +157,7 @@ function renderInventoryEditor(){
   <h3>${esc(address)}</h3>
   <label class="field-label">Nome di comodo<input id="editName" maxlength="80" placeholder="Es. Luce cucina, tapparella studio, termostato camera" value="${esc(rec.name||'')}"></label>
   <div class="two"><label>Categoria<select id="editCategory">${['sconosciuto','clima','luci','tapparelle','attuatori','centrale','sensori','gateway','altro'].map(x=>`<option value="${esc(x)}" ${x===rec.category?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
-  <label>Zona associata<select id="editZone"><option value="">Nessuna / da verificare</option>${(current.settings?.zones||[]).map(z=>`<option value="${esc(z)}" ${z===rec.zone?'selected':''}>${esc(z)}</option>`).join('')}</select></label></div>
+  <label>Zona associata<select id="editZone"><option value="">Nessuna / da verificare</option>${[...new Set([...(current.settings?.zones||[]),...(rec.zone?[rec.zone]:[])])].map(z=>`<option value="${esc(z)}" ${z===rec.zone?'selected':''}>${esc(z)}</option>`).join('')}</select></label></div>
   <label class="field-label">Note / ipotesi<textarea id="editNotes" rows="3" maxlength="500" placeholder="Es. Candidato identificato azionando la luce della cucina">${esc(rec.notes||'')}</textarea></label>
   <label class="check verify-check"><input type="checkbox" id="editVerified" ${rec.verified?'checked':''}> Identificazione verificata con prove ripetute</label>
   <button id="saveInventoryItem" class="btn btn-primary block">Salva identificazione</button>
@@ -194,4 +194,43 @@ $('exportInventory').onclick=async()=>{
   const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='ByMe_Lab_dispositivi.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
  }catch(err){notify(err.message,true);}
+};
+// Zone climatiche: identità stabile, nessuna corrispondenza implicita con OUT.
+function verification(value){return `<label class="check"><input data-field="verified" type="checkbox" ${value?'checked':''}> Associazione verificata con prove</label>`;}
+function refFields(ref, busOnly=false){return `<div class="two"><label>Tipo indirizzo<select data-field="kind">${(busOnly?['sources','groups']:['sources','eeprom']).map(k=>`<option value="${k}" ${ref?.kind===k?'selected':''}>${{sources:'Sorgente KNX',groups:'Gruppo KNX',eeprom:'ID EEPROM'}[k]}</option>`).join('')}</select></label><label>Indirizzo (facoltativo)<input data-field="address" maxlength="20" value="${esc(ref?.address||'')}" placeholder="Es. 1.1.42 / 0C89"></label></div>`;}
+function deviceFields(key, device={}){return `<fieldset data-device="${key}"><legend>${key==='thermostat'?'Termostato Vimar 14514':'Attuatore eventuale'}</legend><label>Nome / riferimento fisico<input data-field="name" maxlength="80" value="${esc(device.name||'')}"></label>${key==='actuator'?`<label>Modello<input data-field="model" maxlength="80" value="${esc(device.model||'')}"></label>`:''}${refFields(device.ref)}${verification(device.verified)}<label>Prove / ipotesi<textarea data-field="notes" maxlength="500">${esc(device.notes||'')}</textarea></label></fieldset>`;}
+function observedRow(item={}){return `<div class="observed-row">${refFields(item,true)}${verification(item.verified)}<label>Prove / ipotesi<input data-field="notes" maxlength="500" value="${esc(item.notes||'')}"></label><button type="button" class="btn btn-minimal remove-observed">Rimuovi indirizzo</button></div>`;}
+function renderZoneCards(zones=[]){
+ $('zoneCards').innerHTML=zones.map(z=>`<article class="zone-card" data-zone-id="${esc(z.id)}"><label>Nome zona<input data-zone-name maxlength="60" value="${esc(z.name)}"></label><div class="two">${deviceFields('thermostat',z.thermostat)}${deviceFields('actuator',z.actuator)}</div><h3>Indirizzi del bus associati alla zona</h3><p class="helptext">L'associazione alla zona è un'ipotesi finché non verificata. Consulta le occorrenze nel catalogo per distinguere gli indirizzi già osservati da quelli inseriti manualmente.</p><div class="observed-list">${(z.observed||[]).map(observedRow).join('')}</div><div class="button-group"><button class="btn btn-outline add-observed">＋ Associa indirizzo bus</button><button class="btn btn-minimal remove-zone">Rimuovi zona</button></div></article>`).join('');
+}
+function fields(node){const out={};node.querySelectorAll('[data-field]').forEach(el=>out[el.dataset.field]=el.type==='checkbox'?el.checked:el.value.trim());return out;}
+function readZoneCards(){return [...$('zoneCards').querySelectorAll('.zone-card')].map(card=>{
+ const z={id:card.dataset.zoneId,name:card.querySelector('[data-zone-name]').value.trim()};
+ for(const key of ['thermostat','actuator']){const d=fields(card.querySelector(`[data-device="${key}"]`));z[key]={name:d.name,model:key==='thermostat'?'14514':d.model,ref:d.address?{kind:d.kind,address:d.address}:null,verified:d.verified,notes:d.notes};}
+ z.observed=[...card.querySelectorAll('.observed-row')].map(fields);return z;
+});}
+$('addZone').onclick=()=>{const zones=readZoneCards();if(zones.length>=100)return notify('Massimo 100 zone',true);let name=`Zona ${zones.length+1}`;while(zones.some(z=>z.name===name))name+=' nuova';zones.push({id:'zona-'+crypto.randomUUID(),name});renderZoneCards(zones);};
+$('zoneCards').onclick=e=>{const card=e.target.closest('.zone-card');if(!card)return;
+ if(e.target.closest('.add-observed'))card.querySelector('.observed-list').insertAdjacentHTML('beforeend',observedRow());
+ if(e.target.closest('.remove-observed'))e.target.closest('.observed-row').remove();
+ if(e.target.closest('.remove-zone')){if($('zoneCards').children.length===1)return notify('Mantieni almeno una zona',true);if(confirm('Rimuovere questa zona e le sue associazioni al prossimo salvataggio? Le note storiche restano invariate.'))card.remove();}
+};
+
+let importConfig=null, importPreview=null, importGeneration=0;
+function invalidatePreview(){importGeneration++;importPreview=null;$('applyConfig').disabled=true;$('configChanges').replaceChildren();$('configSummary').textContent='Genera una nuova anteprima prima di confermare.';}
+$('importConfigFile').onchange=async function(){const file=this.files?.[0];this.value='';if(!file)return;invalidatePreview();importConfig=null;
+ try{if(file.size>3_900_000)throw new Error('JSON troppo grande (massimo 3,9 MB)');importConfig=JSON.parse(await file.text());$('configFileName').textContent=file.name;$('configImportPanel').classList.remove('hidden');await previewConfiguration();}catch(e){notify(e.message,true);}
+};
+$('configImportMode').onchange=invalidatePreview;
+async function previewConfiguration(){if(!importConfig)return;invalidatePreview();const generation=importGeneration;const mode=$('configImportMode').value;
+ try{const result=await api('/api/inventory/import-preview',{config:importConfig,mode});if(generation!==importGeneration)return;importPreview=result.preview_id;
+ $('configSummary').textContent=`${result.summary.aggiunto} aggiunti · ${result.summary.modificato} modificati · ${result.summary.rimosso} rimossi. ${result.zones_preserved?'Il file non contiene zone: saranno conservate.':''}`;
+ $('configChanges').innerHTML=result.changes.map(c=>`<details><summary>${esc(c.action)} · ${esc(c.kind)} ${esc(c.address)}</summary><div class="two"><div><b>Prima</b><pre>${esc(JSON.stringify(c.before,null,2))}</pre></div><div><b>Dopo</b><pre>${esc(JSON.stringify(c.after,null,2))}</pre></div></div></details>`).join('');
+ $('applyConfig').disabled=false;
+ }catch(e){notify(e.message,true);}
+}
+$('previewConfig').onclick=previewConfiguration;
+$('cancelConfig').onclick=()=>{invalidatePreview();importConfig=null;$('configImportPanel').classList.add('hidden');};
+$('applyConfig').onclick=async()=>{if(!importPreview)return;$('applyConfig').disabled=true;
+ try{const result=await api('/api/inventory/import-apply',{preview_id:importPreview});invalidatePreview();importConfig=null;$('configImportPanel').classList.add('hidden');selectedInventory=null;$('inventoryEditor').replaceChildren();await refreshInventory();await update();notify('Configurazione importata. Backup: '+result.backup);}catch(e){invalidatePreview();notify(e.message,true);}
 };

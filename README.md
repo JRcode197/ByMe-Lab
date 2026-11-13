@@ -1,6 +1,6 @@
 # ByMe Lab
 
-Monitor grafico **locale e passivo** per l'analisi dei telegrammi del bus **Vimar By-me** tramite il gateway **ESP_KNXGate** di Guido Pagani. Sviluppato per indagare la comunicazione fra centrale 21509, quattro termostati 14514 e attuatore 01851.2.
+Monitor grafico **locale e passivo** per l'analisi dei telegrammi del bus **Vimar By-me** tramite il gateway **ESP_KNXGate** di Guido Pagani. Sviluppato per indagare la comunicazione fra centrale 21509, termostati 14514 e zone climatiche indipendenti e attuatore 01851.2.
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue) ![Stato](https://img.shields.io/badge/Stato-sperimentale-orange)
 
@@ -27,6 +27,26 @@ Apri **http://127.0.0.1:8765** se il browser non si apre automaticamente. Non se
 - Censimento automatico delle sorgenti e dei gruppi realmente osservati, collegamenti fra indirizzi, nomi di comodo salvati.
 - Importazione di vecchi ZIP ed elenco degli ID EEPROM letto dallo `/status` del gateway.
 - Esportazione dell'anagrafica e CSV con nomi di comodo; riferimento a indirizzi/dispositivi nelle annotazioni.
+
+## Versione 1.3: importazione JSON e zone indipendenti
+
+In **Dispositivi → Importa configurazione JSON**, scegli un inventario esportato da ByMe Lab v1 o v2. Il programma valida il file e mostra elementi aggiunti, modificati e rimossi, con valori prima/dopo espandibili. Scegli la modalità e premi **Conferma importazione** solo dopo aver controllato l'anteprima:
+
+- **Unione:** mantiene gli indirizzi assenti dal file; sui duplicati applica nome, categoria, zona, note e verifica del file, anche se vuoti o `false`. Conserva il massimo dei contatori e dei collegamenti osservati, senza sommare snapshot potenzialmente sovrapposti.
+- **Sostituzione:** rimpiazza le tre sezioni dispositivi, incluse le osservazioni, con quelle importate. Le rimozioni compaiono nell'anteprima.
+- Le zone sono importate se il JSON contiene `climate_zones`: in unione si abbinano per ID stabile; in sostituzione si sostituisce l'elenco. I vecchi JSON v1 senza zone conservano quelle attuali.
+- Un backup `dispositivi.backup-<data-ora>.json` viene scritto prima di ogni applicazione. Per ripristinarlo, importalo in modalità sostituzione. Le sessioni registrate non vengono modificate. La cronologia degli ZIP già importati è conservata per evitare doppi conteggi.
+- Il monitor deve essere fermo. Un'anteprima scade dopo 15 minuti e diventa inutilizzabile se il catalogo cambia. Cambiando modalità occorre rigenerarla. Nessun dato viene inviato online.
+
+**Zone climatiche** parte da cinque schede e permette di aggiungere/rimuovere zone (da 1 a 100), senza alcun legame con il numero di uscite di un attuatore. Le precedenti quattro etichette vengono conservate e viene aggiunta una quinta zona vuota di associazioni. Ogni scheda contiene nome, termostato 14514, eventuale attuatore (nome/modello), riferimenti tipizzati e indirizzi KNX associati. Termostato, attuatore e ogni indirizzo hanno note e stato di verifica indipendenti. Un riferimento inserito manualmente non è un'osservazione del bus e non incrementa i contatori. Le etichette dei dispositivi e le annotazioni storiche non vengono riscritte quando si rinomina una zona.
+
+Il JSON v2 esportato include anche le schede climatiche; nomi/associazioni si salvano nel catalogo locale `dispositivi.json`. Gli ID EEPROM non vengono convertiti in sorgenti o gruppi KNX. Un gruppo resta una destinazione logica, non l'identità fisica di un termostato o di un attuatore.
+
+### Firmware e avvio Windows
+
+Riferimento originale indicato per il gateway: [papergion/ESPknxgate_32](https://github.com/papergion/ESPknxgate_32). Il firmware dell'impianto di riferimento è **ESP_KNXGATE VER_5.0618**. La versione 1.3 conserva i comandi di setup, monitor e ripristino della 1.2 già utilizzati su quel firmware; non aggiorna il firmware e non aggiunge comandi al bus. Il repository ESP32 non dimostra da solo l'identità del firmware installato.
+
+Su Windows, dalla cartella del progetto: `py byme_lab.py` (oppure `python byme_lab.py` se Python è nel PATH). Per prove isolate si può impostare la variabile `BYME_DATA_DIR` su una cartella separata e usare `--web-port 8766 --no-browser`.
 
 ## Nuovo nella versione 1.2: censimento e nomi salvati
 
